@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "bench": "node bench/bench-vs-node.js",
     "experiments": "node experiments/run-all.js"
   },

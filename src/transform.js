@@ -493,35 +493,70 @@ class Transform extends EventEmitter {
     };
   }
 
-  async *[Symbol.asyncIterator]() {
-    while (true) {
-      const chunk = this.read();
-      if (chunk !== null) {
-        yield chunk;
-        continue;
-      }
-      if (this._destroyed) {
-        if (this._storedError) throw this._storedError;
-        return;
-      }
-      if (this._readEnded && this._rbuf.length === 0) return;
-      await new Promise((resolve, reject) => {
+  // Stage 5 — async iteration over the readable side.
+  [Symbol.asyncIterator]() {
+    this.pause();
+    const self = this;
+    let finished = false;
+    let cancelWait = null;
+    const waitForData = () =>
+      new Promise((resolve, reject) => {
         const onReadable = () => { cleanup(); resolve(); };
         const onEnd = () => { cleanup(); resolve(); };
         const onClose = () => { cleanup(); resolve(); };
         const onError = (e) => { cleanup(); reject(e); };
         const cleanup = () => {
-          this.removeListener('readable', onReadable);
-          this.removeListener('end', onEnd);
-          this.removeListener('close', onClose);
-          this.removeListener('error', onError);
+          self.removeListener('readable', onReadable);
+          self.removeListener('end', onEnd);
+          self.removeListener('close', onClose);
+          self.removeListener('error', onError);
+          if (cancelWait === doCancel) cancelWait = null;
         };
-        this.once('readable', onReadable);
-        this.once('end', onEnd);
-        this.once('close', onClose);
-        this.once('error', onError);
+        const doCancel = () => { cleanup(); resolve(); };
+        cancelWait = doCancel;
+        self.once('readable', onReadable);
+        self.once('end', onEnd);
+        self.once('close', onClose);
+        self.once('error', onError);
       });
-    }
+    const it = {
+      async next() {
+        while (true) {
+          if (finished) return { value: undefined, done: true };
+          const chunk = self.read();
+          if (chunk !== null) return { value: chunk, done: false };
+          if (self._destroyed) {
+            finished = true;
+            if (self._storedError) throw self._storedError;
+            return { value: undefined, done: true };
+          }
+          if (self._readEnded && self._rbuf.length === 0) {
+            finished = true;
+            return { value: undefined, done: true };
+          }
+          try {
+            await waitForData();
+          } catch (e) {
+            finished = true;
+            throw e;
+          }
+        }
+      },
+      async return() {
+        finished = true;
+        if (cancelWait) cancelWait();
+        return { value: undefined, done: true };
+      },
+      async throw(err) {
+        finished = true;
+        if (cancelWait) cancelWait();
+        throw err;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
+    return it;
   }
 }
 
