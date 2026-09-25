@@ -80,3 +80,38 @@ test('A fails -> B, C react, resources close', async () => {
   assert.ok(errors.length >= 1, 'errors surfaced');
   assert.ok(mid._destroyed || mid.getStats().destroyed, 'mid closed');
 });
+
+test('consumer error with no user listeners still rejects (no uncaught throw)', async () => {
+  const src = new Readable({
+    objectMode: true,
+    read() {
+      this._n = (this._n || 0) + 1;
+      if (this._n > 100) this.push(null);
+      else this.push(this._n);
+    },
+  });
+  const dst = new Writable({
+    objectMode: true,
+    write(c, cb) {
+      if (c === 3) cb(new Error('consumer died'));
+      else cb();
+    },
+  });
+  await assert.rejects(pipeline(src, dst), /consumer died/);
+  await new Promise((res) => setTimeout(res, 30));
+  assert.ok(src._destroyed, 'producer destroyed, not left pushing');
+});
+
+test('pipe source error destroys listener-less dest without uncaught throw', async () => {
+  const src = new Readable({
+    objectMode: true,
+    read() {
+      this.destroy(new Error('src boom'));
+    },
+  });
+  src.on('error', () => {}); // observe source; dest stays listener-less
+  const dst = new Writable({ objectMode: true, write(c, cb) { cb(); } });
+  src.pipe(dst);
+  await new Promise((res) => setTimeout(res, 30));
+  assert.ok(dst._destroyed);
+});
