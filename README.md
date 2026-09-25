@@ -79,6 +79,17 @@ npm run experiments
 - **C** — consumer randomly stalls ~500 ms: pauses track stalls, buffer bounded.
 - **D** — consumer killed halfway: pipeline rejects, producer destroyed.
 
+## Benchmark vs Node (`bench/`)
+
+```text
+npm run bench
+```
+
+32 MB passthrough: ours ~294 MB/s vs Node ~1455 MB/s (~5× gap), identical
+memory behavior. Backpressure and single-chunk latency are on par. Prime
+suspect for the gap: one pause/resume cycle per chunk. See
+`docs/bench-vs-node.md`.
+
 ## Rules
 
 - `src/` is dependency-free: only relative `require()`s (own `emitter.js`,
