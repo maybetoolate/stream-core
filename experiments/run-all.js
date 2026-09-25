@@ -13,9 +13,13 @@ async function expA() {
   const dst = makePacedSink({ bytesPerSec: 10 * MB });
   const { peaks, stop } = startSampler({ src, dst });
   const t = Date.now();
-  await pipeline(src, dst);
-  const elapsedMs = Date.now() - t;
-  stop();
+  let elapsedMs;
+  try {
+    await pipeline(src, dst);
+    elapsedMs = Date.now() - t;
+  } finally {
+    stop();
+  }
   report('A — slow producer (1 MB/s) vs fast consumer (10 MB/s)', {
     src, dst, peaks, elapsedMs,
     extra: { config: 'producer is the bottleneck' },
@@ -29,9 +33,13 @@ async function expB() {
   const dst = makePacedSink({ bytesPerSec: 1 * MB, highWaterMark: 64 * 1024 });
   const { peaks, stop } = startSampler({ src, dst });
   const t = Date.now();
-  await pipeline(src, dst);
-  const elapsedMs = Date.now() - t;
-  stop();
+  let elapsedMs;
+  try {
+    await pipeline(src, dst);
+    elapsedMs = Date.now() - t;
+  } finally {
+    stop();
+  }
   report('B — fast producer (100 MB/s) vs slow consumer (1 MB/s)', {
     src, dst, peaks, elapsedMs,
     extra: { config: 'backpressure must bound memory' },
@@ -50,9 +58,13 @@ async function expC() {
   });
   const { peaks, stop } = startSampler({ src, dst });
   const t = Date.now();
-  await pipeline(src, dst);
-  const elapsedMs = Date.now() - t;
-  stop();
+  let elapsedMs;
+  try {
+    await pipeline(src, dst);
+    elapsedMs = Date.now() - t;
+  } finally {
+    stop();
+  }
   report('C — consumer randomly stalls (~500ms every 8 chunks)', {
     src, dst, peaks, elapsedMs,
     extra: { config: 'bursty consumer' },
