@@ -276,8 +276,14 @@ class Readable extends EventEmitter {
       cleanup();
       // dest's error handler was removed by cleanup(); swallow the
       // secondary emission — the caller observes the original error.
-      try { dest.once('error', () => {}); } catch (_) {}
-      try { dest.destroy(err); } catch (_) {}
+      // Skip destroyed dests: destroy(err) on them would re-emit 'error'
+      // with no observer. The original error already reached the caller.
+      try {
+        if (!dest._destroyed) {
+          try { dest.once('error', () => {}); } catch (_) {}
+          dest.destroy(err);
+        }
+      } catch (_) {}
     };
     const onDestError = () => {
       cleanup();
@@ -340,7 +346,7 @@ class Readable extends EventEmitter {
     // emits on next tick, so pipe()'s own forwarder would already be gone.
     for (const d of [...this._pipes]) {
       try { this.unpipe(d); } catch (_) {}
-      if (err) {
+      if (err && !d._destroyed) {
         try { d.once('error', () => {}); } catch (_) {}
         try { d.destroy(err); } catch (_) {}
       }
