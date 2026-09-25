@@ -4,11 +4,16 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 
-function codeLines(root, file) {
+function stripped(root, file) {
+  // Strip // comments on the whole source so multiline expressions
+  // (e.g. require(\n'node:events'\n)) are still matched as one unit.
   return fs
     .readFileSync(path.join(root, file), 'utf8')
-    .split('\n')
-    .map((line) => line.replace(/\/\/.*$/, ''));
+    .replace(/\/\/.*$/gm, '');
+}
+
+function lineOf(src, index) {
+  return src.slice(0, index).split('\n').length;
 }
 
 test('src/ is dependency-free: only relative require() calls', () => {
@@ -16,12 +21,12 @@ test('src/ is dependency-free: only relative require() calls', () => {
   const bad = [];
   for (const f of fs.readdirSync(root)) {
     if (!f.endsWith('.js')) continue;
-    codeLines(root, f).forEach((code, i) => {
-      // Allowed: require('./x') / require('../x') — our own modules.
-      // Forbidden: bare specifiers (events, stream, fs, ...) and npm packages.
-      const m = code.match(/require\(\s*['"]([^'"]+)['"]/);
-      if (m && !m[1].startsWith('.')) bad.push(`src/${f}:${i + 1}: ${code.trim()}`);
-    });
+    const src = stripped(root, f);
+    // Allowed: require('./x') / require('../x') — our own modules.
+    // Forbidden: bare specifiers (events, stream, fs, ...) and npm packages.
+    for (const m of src.matchAll(/require\(\s*['"]([^'"]+)['"]/g)) {
+      if (!m[1].startsWith('.')) bad.push(`src/${f}:${lineOf(src, m.index)}: ${m[0]}`);
+    }
   }
   assert.strictEqual(bad.join('\n'), '', `non-relative require() in src/:\n${bad.join('\n')}`);
 });
@@ -32,14 +37,12 @@ test("io/ never uses the events/stream abstractions (skipped if io/ absent)", ()
   const bad = [];
   for (const f of fs.readdirSync(root)) {
     if (!f.endsWith('.js')) continue;
-    codeLines(root, f).forEach((code, i) => {
-      if (
-        /require\(\s*['"](node:)?(events|stream)['"]/.test(code) ||
-        /from\s+['"](node:)?(events|stream)['"]/.test(code)
-      ) {
-        bad.push(`io/${f}:${i + 1}: ${code.trim()}`);
-      }
-    });
+    const src = stripped(root, f);
+    for (const m of src.matchAll(
+      /require\(\s*['"](node:)?(events|stream)['"]|from\s+['"](node:)?(events|stream)['"]/g
+    )) {
+      bad.push(`io/${f}:${lineOf(src, m.index)}: ${m[0]}`);
+    }
   }
   assert.strictEqual(bad.join('\n'), '', `abstraction used in io/:\n${bad.join('\n')}`);
 });
