@@ -61,9 +61,23 @@ for await (const chunk of new SocketReadable(socket)) {
 }
 ```
 
-`io/` never requires Node's `stream` module (`test/no-stream-import.test.js`
+`io/` never requires Node's `stream` module (`test/no-forbidden-imports.test.js`
 enforces it). Sockets/stdin are only used as OS endpoints: `data` is
 pushed into our queue, a full queue pauses the endpoint, `_read` resumes it.
+
+## Instrument everything (`experiments/`)
+
+Every class exposes `getStats()` (buffered bytes, queue depth, chunks/bytes,
+pause/resume and drain/false counts). Run:
+
+```text
+npm run experiments
+```
+
+- **A** — producer 1 MB/s, consumer 10 MB/s: consumer starves, no backpressure.
+- **B** — producer 100 MB/s, consumer 1 MB/s: pauses/resumes bound memory ~HWM.
+- **C** — consumer randomly stalls ~500 ms: pauses track stalls, buffer bounded.
+- **D** — consumer killed halfway: pipeline rejects, producer destroyed.
 
 ## Rules
 
