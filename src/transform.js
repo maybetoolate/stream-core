@@ -1,5 +1,5 @@
 'use strict';
-const { EventEmitter } = require('events');
+const { EventEmitter } = require('./emitter');
 
 function sizeOf(chunk, objectMode) {
   if (objectMode) return 1;
