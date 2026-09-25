@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { EventEmitter } = require('events');
+const { EventEmitter } = require('../src/emitter');
 const { StdinReadable, StdoutWritable } = require('../io/stdio');
 const { Readable, pipeline } = require('../src');
 
