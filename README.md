@@ -39,6 +39,32 @@ const dst = new Writable({
 src.pipe(upper).pipe(dst);
 ```
 
+## Real I/O (`io/`)
+
+```js
+const { FileReadable, FileWritable } = require('./io/file');
+const { SocketReadable, SocketWritable } = require('./io/socket');
+const { StdoutWritable } = require('./io/stdio');
+const { Transform, pipeline } = require('./src');
+
+// file -> transform -> file
+await pipeline(
+  new FileReadable('in.txt'),
+  new Transform({ transform(c, push, done) { push(Buffer.from(c.toString().toUpperCase())); done(); } }),
+  new FileWritable('out.txt')
+);
+
+// TCP socket -> parser -> socket
+const { SocketReadable } = require('./io/socket');
+for await (const chunk of new SocketReadable(socket)) {
+  // parse chunk
+}
+```
+
+`io/` never requires Node's `stream` module (`test/no-stream-import.test.js`
+enforces it). Sockets/stdin are only used as OS endpoints: `data` is
+pushed into our queue, a full queue pauses the endpoint, `_read` resumes it.
+
 ## Rules
 
 - `src/` is dependency-free: only relative `require()`s (own `emitter.js`,
