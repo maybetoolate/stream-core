@@ -411,6 +411,9 @@ class Transform extends EventEmitter {
     };
     const onSrcError = (err) => {
       cleanup();
+      // dest's error handler was removed by cleanup(); swallow the
+      // secondary emission — the caller observes the original error.
+      try { dest.once('error', () => {}); } catch (_) {}
       try { dest.destroy(err); } catch (_) {}
     };
     const onDestError = () => {
@@ -466,8 +469,14 @@ class Transform extends EventEmitter {
     if (err) this._storedError = err;
     if (err) process.nextTick(() => this.emit('error', err));
     process.nextTick(() => this.emit('close'));
+    // Detach pipes. On error, propagate downstream so piped destinations
+    // react instead of hanging (same reason as Readable.destroy).
     for (const d of [...this._pipes]) {
       try { this.unpipe(d); } catch (_) {}
+      if (err) {
+        try { d.once('error', () => {}); } catch (_) {}
+        try { d.destroy(err); } catch (_) {}
+      }
     }
     return this;
   }
