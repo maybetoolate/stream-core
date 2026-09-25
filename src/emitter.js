@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Minimal EventEmitter. Zero dependencies — no `require()` calls at all.
+ * Minimal EventEmitter. Dependency-free — only relative requires.
  *
  * Implements the subset of Node's `events` module that stream-core uses:
  * on / addListener / prependListener / once / removeListener / off /
