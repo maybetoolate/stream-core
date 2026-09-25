@@ -1,7 +1,7 @@
 'use strict';
 
-// NOTE: never require('stream') here. EventEmitter only.
-const { EventEmitter } = require('events');
+// NOTE: zero dependencies — no require('events'), no require('stream').
+const { EventEmitter } = require('./emitter');
 
 function chunkSizeOf(chunk, objectMode) {
   if (objectMode) return 1;
