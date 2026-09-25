@@ -66,13 +66,15 @@ class EventEmitter {
   removeListener(event, listener) {
     const list = this._events[event];
     if (list !== undefined) {
-      const kept = list.filter(
-        (fn) => fn !== listener && fn.listener !== listener
-      );
-      if (kept.length === 0) {
+      // Node removes only the most recently registered match.
+      for (let i = list.length - 1; i >= 0; i -= 1) {
+        if (list[i] === listener || list[i].listener === listener) {
+          list.splice(i, 1);
+          break;
+        }
+      }
+      if (list.length === 0) {
         delete this._events[event];
-      } else {
-        this._events[event] = kept;
       }
     }
     return this;
@@ -93,7 +95,9 @@ class EventEmitter {
 
   listeners(event) {
     const list = this._events[event];
-    return list === undefined ? [] : list.slice();
+    // Unwrap once() registrations, like Node (see rawListeners note:
+    // we keep no wrapper access; the original is what callers need).
+    return list === undefined ? [] : list.map((fn) => fn.listener || fn);
   }
 
   listenerCount(event) {

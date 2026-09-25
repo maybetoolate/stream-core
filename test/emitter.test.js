@@ -101,6 +101,24 @@ test('emit iterates a snapshot (removal mid-emit is safe)', () => {
   assert.deepStrictEqual(order, ['first']);
 });
 
+test('removeListener removes only the most recent duplicate (Node parity)', () => {
+  const e = new EventEmitter();
+  const fn = () => {};
+  e.on('x', fn);
+  e.on('x', fn);
+  e.removeListener('x', fn);
+  assert.strictEqual(e.listenerCount('x'), 1);
+  e.removeListener('x', fn);
+  assert.strictEqual(e.listenerCount('x'), 0);
+});
+
+test('listeners() returns the original callback for once() registrations', () => {
+  const e = new EventEmitter();
+  const fn = () => {};
+  e.once('x', fn);
+  assert.strictEqual(e.listeners('x')[0], fn);
+});
+
 test('methods chain and reject non-function listeners', () => {
   const e = new EventEmitter();
   assert.strictEqual(e.on('x', () => {}), e);
