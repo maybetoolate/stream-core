@@ -55,7 +55,7 @@ function makePacedSink({
       chunks += 1;
       const base = (chunk.length / bytesPerSec) * 1000;
       const stall = stallEveryChunks > 0 && chunks % stallEveryChunks === 0
-        ? stallMs + Math.random() * stallMs
+        ? stallMs / 2 + Math.random() * stallMs // mean ~= stallMs
         : 0;
       setTimeout(() => {
         written += chunk.length;
