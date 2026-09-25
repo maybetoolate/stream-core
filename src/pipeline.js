@@ -46,6 +46,10 @@ function pipeline(...args) {
           if (s && typeof s.destroy === 'function' && !s._destroyed) {
             // Avoid re-emitting the original error from every stage.
             if (s._storedError === err) continue;
+            // Secondary destroys emit 'error' on next tick; the pipeline's
+            // own handlers are already cleaned up, so swallow them here.
+            // The original error already reached the caller via done(err).
+            if (typeof s.once === 'function') s.once('error', () => {});
             s.destroy(err);
           }
         } catch (_) {}
