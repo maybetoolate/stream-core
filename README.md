@@ -41,6 +41,8 @@ src.pipe(upper).pipe(dst);
 
 ## Rules
 
-- Never `require('stream')` inside `src/` or `io/`. CI enforces it.
+- `src/` is dependency-free: only relative `require()`s (own `emitter.js`,
+  no `events`, no `stream`). `io/` may use `fs`/`net` as OS endpoints but
+  never `events`/`stream`. `test/no-forbidden-imports.test.js` enforces it.
 - Never push directly to `main`. Open a PR from a feature branch.
 - Small commits, one concept each.
