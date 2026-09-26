@@ -29,3 +29,18 @@ pub fn checksum(input: Buffer) -> u32 {
   }
   h
 }
+
+/// Heavy kernel stand-in: FNV over the buffer `rounds` times.
+/// Models parse/compress-class work where per-byte cost dominates.
+#[napi]
+pub fn heavy(input: Buffer, rounds: u32) -> u32 {
+  let bytes = input.as_ref();
+  let mut h: u32 = 0x811c_9dc5;
+  for _ in 0..rounds {
+    for b in bytes {
+      h ^= *b as u32;
+      h = h.wrapping_mul(0x0100_0193);
+    }
+  }
+  h
+}

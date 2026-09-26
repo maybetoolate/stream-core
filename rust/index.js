@@ -32,6 +32,18 @@ function jsChecksum(input) {
   return h >>> 0;
 }
 
+function jsHeavy(input, rounds) {
+  const v = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  let h = 0x811c9dc5;
+  for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < v.length; i++) {
+      h ^= v[i];
+      h = Math.imul(h, 0x01000193);
+    }
+  }
+  return h >>> 0;
+}
+
 /**
  * Uppercase Transform. backend 'auto' (default) uses Rust when built,
  * 'rust' throws if unbuilt, 'js' always uses the fallback.
@@ -50,4 +62,4 @@ function createUppercase({ backend = 'auto' } = {}) {
   });
 }
 
-module.exports = { loadNative, jsUppercase, jsChecksum, createUppercase };
+module.exports = { loadNative, jsUppercase, jsChecksum, jsHeavy, createUppercase };
