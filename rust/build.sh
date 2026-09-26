@@ -12,6 +12,9 @@ else
   CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/gcc \
     cargo build --release
 fi
-SO=$(ls target/release/libstreamcore.so target/release/streamcore.* 2>/dev/null | head -n 1)
+case "$(uname -s)" in
+  Darwin) SO=target/release/libstreamcore.dylib ;;
+  *) SO=$(ls target/release/libstreamcore.so target/release/streamcore.* 2>/dev/null | head -n 1) ;;
+esac
 cp "$SO" ./native.node
 echo "wrote rust/native.node"

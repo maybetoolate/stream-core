@@ -8,8 +8,12 @@ const { Transform } = require('../src/transform');
 function loadNative() {
   try {
     return require('./native.node');
-  } catch (_) {
-    return null;
+  } catch (err) {
+    // Missing build -> graceful fallback. A present-but-broken addon must
+    // stay loud: silently falling back would hide a broken build and skip
+    // the native tests that would catch it.
+    if (err && err.code === 'MODULE_NOT_FOUND') return null;
+    throw err;
   }
 }
 
