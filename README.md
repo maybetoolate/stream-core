@@ -98,8 +98,10 @@ npm run bench:rust
 ```
 
 N-API `uppercase`/`checksum`/`heavy` with a byte-identical JS fallback.
-Measured: ~300 ns/call boundary premium; Rust loses at small chunks (0.36x
-at 64 B), ties at 1 MB and on a 64-round kernel — V8 matches `rustc -O3` on
+Measured: the full Rust `checksum(64B)` call runs a few hundred ns slower
+end-to-end than JS (work + boundary together); Rust loses clearly only at
+small chunks (0.48x
+at 64 B), roughly breaks even on large chunks and on a 64-round kernel — V8 matches `rustc -O3` on
 simple loops. Reach for Rust only for structurally-faster kernels, and fix
 framework overhead first. See `docs/rust-boundary.md`.
 

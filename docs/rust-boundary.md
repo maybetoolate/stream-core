@@ -8,24 +8,32 @@ tests skip native cases when it is absent.
 
 ## Measured (this box, median of 3–5, warmup, `--expose-gc`)
 
-Raw call, `checksum(64B)`: JS ~117 ns/call, Rust ~443 ns/call.
-The boundary itself costs ~300 ns per call, every call, before any work.
+Raw call, `checksum(64B)`: JS ~111 ns/call, Rust ~445 ns/call.
+The complete Rust checksum call is ~330 ns/call slower on this box. That
+covers checksum work *and* JS↔Rust boundary costs together — it does not
+isolate the boundary alone, but it is the right guidance for small ops:
+a few hundred nanoseconds of premium per call, every call.
 
-Uppercase pipeline, 8–16 MB, instant sink:
+Uppercase pipeline, instant sink (backend order alternated per sample):
 
 | chunk | JS MB/s | Rust MB/s | ratio |
 | ----- | ------- | --------- | ----- |
-| 64 B | 16 | 5.8 | 0.36x |
-| 4 KB | 138 | 82 | 0.59x |
-| 64 KB | 400 | 281 | 0.70x |
-| 1 MB | 552 | 571 | 1.04x |
+| 64 B | 11 | 5.3 | 0.48x |
+| 4 KB | 118 | 121 | 1.03x |
+| 64 KB | 296 | 356 | 1.20x |
+| 1 MB | 500 | 842 | 1.68x |
 
 Compute-bound kernel, `heavy(64KB)` FNV × rounds:
 
 | rounds | JS | Rust | ratio |
 | ------ | -- | ---- | ----- |
-| 1 | 78 µs | 77 µs | 1.02x |
-| 64 | 5.1 ms | 5.0 ms | 1.02x |
+| 1 | 82 µs | 77 µs | 1.06x |
+| 64 | 5.0 ms | 4.9 ms | 1.03x |
+
+Caveat on the table: mid/large-chunk ratios move ±50% run to run on this
+box (thermals, GC) — only the direction is claimed. Stable across all runs:
+Rust loses at 64 B, the heavy kernel is parity, and the raw-call premium
+holds.
 
 ## Reading
 
