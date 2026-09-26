@@ -3,11 +3,12 @@
 // Stage 9 — where does the JS<->Rust boundary stop paying off?
 // Run: npm run bench:rust  (requires sh rust/build.sh first)
 // Compares byte-identical JS vs Rust uppercase Transforms at several chunk
-// sizes, plus a raw call-overhead probe with a minimal Rust->JS payload.
+// sizes, plus raw call-overhead and compute-kernel probes.
 //
-// Methodology: warmup, then median of 3 alternating runs per cell with a
-// GC between cells when available (run node with --expose-gc). Single-box
-// numbers — directional, not constants.
+// Methodology: time-bounded warmup, median of interleaved samples with the
+// backend order alternated per sample (order recorded in `order`), GC
+// between samples when available (script runs node with --expose-gc).
+// Single-box numbers — directional, not constants.
 const { Readable, Writable, pipeline } = require('../src');
 const { loadNative, jsUppercase, jsChecksum, jsHeavy } = require('../rust');
 
@@ -17,6 +18,16 @@ const TOTALS = { 64: 2 * 1024 * 1024, 4096: 8 * 1024 * 1024, 65536: 16 * 1024 * 
 function median(xs) {
   const s = xs.slice().sort((a, b) => a - b);
   return s[Math.floor(s.length / 2)];
+}
+
+/** Warmup bounded by wall time, so expensive kernels don't stall the bench. */
+function warmupCalls(fn, arg, budgetMs = 500) {
+  const t = Date.now();
+  let n = 0;
+  do {
+    fn(arg);
+    n += 1;
+  } while (Date.now() - t < budgetMs && n < 100000);
 }
 
 async function runOnce(fn, chunkBytes, totalBytes) {
@@ -51,27 +62,58 @@ async function runOnce(fn, chunkBytes, totalBytes) {
   return totalBytes / 1024 / 1024 / ((Date.now() - t) / 1000);
 }
 
-async function pipelineThroughput(label, fn, chunkBytes) {
+/** Throughput cell: warmup both backends, then 3 interleaved samples. */
+async function pipelineCell(chunkBytes, jsFn, rustFn) {
   const totalBytes = TOTALS[chunkBytes];
-  await runOnce(fn, chunkBytes, Math.max(chunkBytes, totalBytes / 4)); // warmup
-  const samples = [];
+  const warm = Math.max(chunkBytes, totalBytes / 4);
+  await runOnce(jsFn, chunkBytes, warm);
+  await runOnce(rustFn, chunkBytes, warm);
+  const js = [];
+  const rust = [];
+  const order = [];
   for (let i = 0; i < 3; i++) {
+    const first = i % 2 === 0 ? 'js' : 'rust';
+    order.push(first);
     gc();
-    samples.push(await runOnce(fn, chunkBytes, totalBytes));
+    if (first === 'js') {
+      js.push(await runOnce(jsFn, chunkBytes, totalBytes));
+      gc();
+      rust.push(await runOnce(rustFn, chunkBytes, totalBytes));
+    } else {
+      rust.push(await runOnce(rustFn, chunkBytes, totalBytes));
+      gc();
+      js.push(await runOnce(jsFn, chunkBytes, totalBytes));
+    }
     gc();
   }
-  return { label, chunkBytes, mbPerSec: median(samples) };
+  return { js: median(js), rust: median(rust), order: order.join(',') };
 }
 
-function rawCallOverhead(label, fn, arg, n) {
-  for (let i = 0; i < 10000; i++) fn(arg); // warmup
-  const samples = [];
-  for (let i = 0; i < 5; i++) {
-    const t = process.hrtime.bigint();
-    for (let j = 0; j < n; j++) fn(arg);
-    samples.push(Number(process.hrtime.bigint() - t) / n);
+function timeCalls(fn, arg, n) {
+  const t = process.hrtime.bigint();
+  for (let j = 0; j < n; j++) fn(arg);
+  return Number(process.hrtime.bigint() - t) / n;
+}
+
+/** Raw call probe: warmup both, then 5 interleaved rounds. */
+function rawCell(label, jsFn, rustFn, arg, n) {
+  warmupCalls(jsFn, arg);
+  warmupCalls(rustFn, arg);
+  const js = [];
+  const rust = [];
+  const order = [];
+  for (let r = 0; r < 5; r++) {
+    const first = r % 2 === 0 ? 'js' : 'rust';
+    order.push(first);
+    if (first === 'js') {
+      js.push(timeCalls(jsFn, arg, n));
+      rust.push(timeCalls(rustFn, arg, n));
+    } else {
+      rust.push(timeCalls(rustFn, arg, n));
+      js.push(timeCalls(jsFn, arg, n));
+    }
   }
-  return { label, nsPerCall: median(samples) };
+  return { label, js: median(js), rust: median(rust), order: order.join(',') };
 }
 
 async function main() {
@@ -82,30 +124,34 @@ async function main() {
     return;
   }
   const tiny = Buffer.alloc(64, 'a');
-  console.log('raw call overhead: checksum(64B) x 20000, median of 5');
-  console.table([
-    rawCallOverhead('js', jsChecksum, tiny, 20000),
-    rawCallOverhead('rust', native.checksum, tiny, 20000),
-  ]);
+  console.log('raw call overhead: checksum(64B) x 20000');
+  console.table([rawCell('checksum', jsChecksum, native.checksum, tiny, 20000)]);
 
-  console.log('pipeline throughput: uppercase, instant sink, median of 3');
+  console.log('pipeline throughput: uppercase, instant sink');
   const rows = [];
   for (const chunkBytes of [64, 4096, 65536, 1048576]) {
-    const js = await pipelineThroughput('js', jsUppercase, chunkBytes);
-    const rust = await pipelineThroughput('rust', native.uppercase, chunkBytes);
-    rows.push({ ...js, vs: '' });
-    rows.push({ ...rust, vs: (rust.mbPerSec / js.mbPerSec).toFixed(2) + 'x' });
+    const cell = await pipelineCell(chunkBytes, jsUppercase, native.uppercase);
+    rows.push({ chunkBytes, jsMbPerSec: cell.js, rustMbPerSec: cell.rust, order: cell.order });
   }
   console.table(rows);
 
-  console.log('compute-bound kernel: heavy(64KB) x rounds, median of 5');
+  console.log('compute-bound kernel: heavy(64KB) x rounds');
   const buf64k = Buffer.alloc(65536, 'a');
   const krows = [];
   for (const rounds of [1, 64]) {
-    const js = rawCallOverhead(`js x${rounds}`, (b) => jsHeavy(b, rounds), buf64k, 20);
-    const rust = rawCallOverhead(`rust x${rounds}`, (b) => native.heavy(b, rounds), buf64k, 20);
-    krows.push({ ...js, vs: '' });
-    krows.push({ ...rust, vs: (js.nsPerCall / rust.nsPerCall).toFixed(2) + 'x' });
+    const cell = rawCell(
+      `heavy x${rounds}`,
+      (b) => jsHeavy(b, rounds),
+      (b) => native.heavy(b, rounds),
+      buf64k,
+      20
+    );
+    krows.push({
+      label: cell.label,
+      jsNsPerCall: cell.js,
+      rustNsPerCall: cell.rust,
+      order: cell.order,
+    });
   }
   console.table(krows);
 }
